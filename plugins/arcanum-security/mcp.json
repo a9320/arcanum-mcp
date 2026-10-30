@@ -2,8 +2,8 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "arcanum-security": {
-      "command": "python",
-      "args": ["-m", "arcanum_mcp"]
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/a9320/arcanum-mcp", "arcanum-mcp"]
     }
   }
 }
