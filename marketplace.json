@@ -1,6 +1,10 @@
 {
   "name": "arcanum-marketplace",
-  "description": "CodeRisk Arcanum — prompt-injection and code-security tools for AI-assisted development.",
+  "owner": { "name": "ArcanumSec" },
+  "metadata": {
+    "description": "CodeRisk Arcanum — prompt-injection and code-security tools for AI-assisted development.",
+    "version": "0.1.0"
+  },
   "plugins": [
     {
       "name": "arcanum-security",
