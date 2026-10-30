@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arcanum-mcp"
+version = "0.1.0"
+description = "MCP server exposing CodeRisk Arcanum's deterministic PITAX checks (prompt-injection scan + code audit)."
+requires-python = ">=3.11"
+dependencies = ["mcp>=2.1"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio"]
+# Engine dependency. Not on PyPI yet: installing this extra pulls the full engine
+# (strands-agents, pydantic). The slim, zero-dependency `codeark-pitax` wheel is the
+# intended one-command story; until then ARCA_SPARK_PATH works for local checkouts.
+spark = ["codeark @ git+https://github.com/a9320/arcanum-spark"]
+
+[project.scripts]
+arcanum-mcp = "arcanum_mcp.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
