@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arcanum-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server exposing CodeRisk Arcanum's deterministic PITAX checks (prompt-injection scan + code audit)."
 requires-python = ">=3.11"
-dependencies = ["mcp>=2.1"]
+dependencies = ["mcp>=2.1", "codeark-pitax>=0.1.0"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]

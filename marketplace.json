@@ -3,13 +3,13 @@
   "owner": { "name": "ArcanumSec" },
   "metadata": {
     "description": "CodeRisk Arcanum — prompt-injection and code-security tools for AI-assisted development.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "arcanum-security",
       "description": "PITAX prompt-injection scan plus deterministic code audit. Runs locally; no model calls, no telemetry.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "source": "./plugins/arcanum-security"
     }
   ]

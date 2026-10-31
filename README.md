@@ -37,19 +37,11 @@ manual `pip install` for this repo:
   "args": ["--from", "git+https://github.com/a9320/arcanum-mcp", "arcanum-mcp"] } } }
 ```
 
-**One prerequisite remains: the engine.** A slim, zero-dependency wheel
-(`codeark-pitax`) is being prepared for PyPI — once published, `pip install codeark-pitax`
-completes the one-command story. Today, either
-
-```bash
-pip install "codeark @ git+https://github.com/a9320/arcanum-spark"   # full engine
-# or point the server at a local checkout
-export ARCA_SPARK_PATH=/path/to/arcanum-spark
-```
-
-Without it, both tools answer with an actionable error instead of failing silently
-(verified). The one-command story lands when the slim, zero-dependency `codeark-pitax`
-wheel is published — that is the open packaging task.
+**The engine rides the same install now.** The slim wheel `codeark-pitax` is on
+PyPI and declared as a dependency, so the `uvx` bootstrap pulls the scanner
+automatically — no checkout, no `ARCA_SPARK_PATH`, nothing else to install. The
+wheel is built from the same single source as the main engine and verified
+report-for-report against it (see arcanum-spark `tests/test_slim_build.py`).
 
 > `uv` caches packages on the system drive by default. To keep large caches off a small
 > `C:` volume, set `UV_CACHE_DIR` (e.g. `D:\tools\uv-cache`) to another drive.
