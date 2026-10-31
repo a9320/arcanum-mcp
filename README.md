@@ -37,7 +37,9 @@ manual `pip install` for this repo:
   "args": ["--from", "git+https://github.com/a9320/arcanum-mcp", "arcanum-mcp"] } } }
 ```
 
-**One prerequisite remains: the engine.** `codeark` is not on PyPI yet, so either
+**One prerequisite remains: the engine.** A slim, zero-dependency wheel
+(`codeark-pitax`) is being prepared for PyPI — once published, `pip install codeark-pitax`
+completes the one-command story. Today, either
 
 ```bash
 pip install "codeark @ git+https://github.com/a9320/arcanum-spark"   # full engine

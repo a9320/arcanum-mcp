@@ -46,17 +46,30 @@ _LANG_EXT = {
 
 
 def _engine() -> Any:
-    """Return codeark's deterministic scanner; import lazily so the server starts offline."""
-    try:
-        from codeark.agents.agent0_pitax import run_agent0
-        return run_agent0
-    except ImportError:
-        extra = (os.environ.get("ARCA_SPARK_PATH") or "").strip()
-        if extra and Path(extra).is_dir():
-            sys.path.insert(0, extra)
+    """Resolve the deterministic scanner: slim wheel -> full engine -> ARCA_SPARK_PATH."""
+    for module_path, attr in (
+        ("codeark_pitax", "scan_repo"),                    # slim wheel (PyPI / local install)
+        ("codeark.agents.agent0_pitax", "run_agent0"),     # full engine
+    ):
+        try:
+            mod = __import__(module_path, fromlist=[attr])
+            return getattr(mod, attr)
+        except ImportError:
+            continue
+    extra = (os.environ.get("ARCA_SPARK_PATH") or "").strip()
+    if extra and Path(extra).is_dir():
+        sys.path.insert(0, extra)
+        try:
             from codeark.agents.agent0_pitax import run_agent0
             return run_agent0
-        raise
+        except ImportError:
+            pass
+    raise ImportError(
+        "no scanner engine found. Install the slim wheel (`pip install codeark-pitax` once "
+        "published) or the full engine (`pip install 'codeark @ "
+        "git+https://github.com/a9320/arcanum-spark'`), or point ARCA_SPARK_PATH at a local "
+        "arcanum-spark checkout."
+    )
 
 
 def _engine_error(exc: Exception) -> str:
