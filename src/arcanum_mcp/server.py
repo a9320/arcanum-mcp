@@ -48,7 +48,7 @@ _LANG_EXT = {
 def _engine() -> Any:
     """Resolve the deterministic scanner: slim wheel -> full engine -> ARCA_SPARK_PATH."""
     for module_path, attr in (
-        ("codeark_pitax", "scan_repo"),                    # slim wheel (PyPI / local install)
+        ("codeark_pitax.scan_engine", "scan_repo"),        # slim wheel (PyPI / local install)
         ("codeark.agents.agent0_pitax", "run_agent0"),     # full engine
     ):
         try:
