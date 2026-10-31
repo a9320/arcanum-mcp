@@ -105,3 +105,13 @@ The PITAX rule set is derived from **Prompt Injection Taxonomy v1.6.1** by Jason
 Arcanum (CC BY 4.0). See `arcanum-spark` for the rule mapping and license terms.
 
 Licensed under the same terms as `arcanum-spark`.
+## Roadmap
+
+| Layer | Tool | Status | Distribution |
+|---|---|---|---|
+| Rules | `pitax_scan`, `code_audit` | shipped | slim `codeark-pitax` wheel → PyPI (planned) |
+| Office | `doc_scan` | under evaluation (needs routing data) | same wheel |
+| Trained ranker | `rank_hypotheses` | designed — see arcanum-spark `eval/replay.py::score_laya`; gate contract leaks no verdict info | Laya checkpoint via the engine's GitHub Release assets |
+
+One-command install (`uvx arcanum-mcp`) lands with the slim wheel. After that:
+awesome-copilot PR → routing metrics from the 12-case set → announcement.
