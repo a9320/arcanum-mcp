@@ -109,3 +109,22 @@ Licensed under the same terms as `arcanum-spark`.
 
 One-command install (`uvx arcanum-mcp`) lands with the slim wheel. After that:
 awesome-copilot PR → routing metrics from the 12-case set → announcement.
+
+## Remote mode (HTTP) — for self-hosting / teams
+
+`python -m arcanum_mcp --http` serves the same two tools over Streamable HTTP with
+**mandatory** bearer-token auth (set `ARCA_MCP_TOKEN` to a long random string; the
+server refuses to start without it).
+
+```bash
+ARCA_MCP_TOKEN="$(openssl rand -hex 32)" python -m arcanum_mcp --http --port 8000
+# any MCP client connects to http://<host>:8000/mcp with header:
+#   Authorization: Bearer <ARCA_MCP_TOKEN>
+```
+
+**Data-flow disclosure**: in HTTP mode the *snippets or files you explicitly ask to
+scan* are sent to the machine running this server — not your whole repository, and
+nothing is stored (in-memory only, 0-day retention). If that is not acceptable,
+use the default stdio mode, which never leaves the machine. Deploying this mode
+behind Azure Container Apps / API Management is the documented enterprise path
+(see arcanum-spark `docs/` and the ArcanumSec plan).

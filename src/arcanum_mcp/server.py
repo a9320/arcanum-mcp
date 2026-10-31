@@ -245,6 +245,50 @@ def code_audit(code: str = "", path: str = "", language: str = "") -> str:
     )
 
 
+HTTP_TOKEN_ENV = "ARCA_MCP_TOKEN"
+
+
+def _token_guard(app: Any, token: str):
+    """ASGI 中间件：校验 Authorization: Bearer <token>，拒绝一切未授权请求。"""
+    expected = f"Bearer {token}"
+
+    async def guarded(scope: dict, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await app(scope, receive, send)
+            return
+        headers = {
+            k.decode("latin-1").lower(): v.decode("latin-1")
+            for k, v in scope.get("headers", [])
+        }
+        if headers.get("authorization") != expected:
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [(b"content-type", b"application/json")],
+            })
+            await send({"type": "http.response.body", "body": b'{"error": "unauthorized"}'})
+            return
+        await app(scope, receive, send)
+
+    return guarded
+
+
+def run_http(server: Any | None = None, *, host: str = "127.0.0.1", port: int = 8000,
+             token: str | None = None) -> None:
+    """以 HTTP（Streamable HTTP）形态提供服务。**必须带 token**——拒绝裸奔服务器。"""
+    tok = (token or os.environ.get(HTTP_TOKEN_ENV, "")).strip()
+    if not tok:
+        raise SystemExit(
+            f"HTTP mode requires {HTTP_TOKEN_ENV} (a long random string) — "
+            "refusing to start an unauthenticated network server"
+        )
+    import uvicorn
+
+    s = server or build_server()
+    app = _token_guard(s.streamable_http_app(), tok)
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
 def build_server():
     """Build the MCP server (works with mcp>=2 MCPServer and mcp<2 FastMCP)."""
     try:
