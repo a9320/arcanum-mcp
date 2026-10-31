@@ -74,3 +74,19 @@ def test_read_path_skips_vendor_directories(tmp_path):
 def test_server_exposes_exactly_two_tools():
     tools = asyncio.run(srv.build_server().list_tools())
     assert {tool.name for tool in tools} == {"pitax_scan", "code_audit"}
+
+def test_render_appends_engine_meta_and_context_chip():
+    findings = [{
+        "type": "PIT-N-06", "severity": "high", "file": "docs/a.md", "line": 3,
+        "pitax": {"context": "fenced"},
+    }]
+    out = srv._render(findings, "T")
+    assert "ctx=fenced" in out
+    assert "engine=" in out and "PITAX v" in out
+
+
+def test_render_without_context_has_no_chip():
+    findings = [{"type": "PIT-T-51", "severity": "high", "file": "a.py", "line": 1}]
+    out = srv._render(findings, "T")
+    assert "[ctx=" not in out
+    assert "engine=" in out

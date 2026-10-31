@@ -85,6 +85,22 @@ def _clip(text: Any, limit: int) -> str:
     return value[:limit] + ("…" if len(value) > limit else "")
 
 
+def _engine_meta() -> str:
+    """Engine identification line (mirrors the _engine() resolution order)."""
+    try:
+        from codeark_pitax.rules import PITAX_VERSION as v
+
+        return f"engine=codeark-pitax · PITAX v{v}"
+    except ImportError:
+        pass
+    try:
+        from codeark.pitax.rules import PITAX_VERSION as v
+
+        return f"engine=codeark (full) · PITAX v{v}"
+    except ImportError:
+        return "engine=unavailable"
+
+
 def _render(findings: list[dict[str, Any]], title: str) -> str:
     if not findings:
         return f"{title}: no PITAX findings (deterministic rules; no model called)."
@@ -110,12 +126,16 @@ def _render(findings: list[dict[str, Any]], title: str) -> str:
         detail = _clip(
             finding.get("code_snippet") or finding.get("title") or finding.get("description"), 140
         )
-        lines.append(f"- [{str(finding.get('severity') or 'medium').upper()}] {rule} @ {where} — {detail}")
+        extra = finding.get("pitax")
+        context = extra.get("context") if isinstance(extra, dict) else ""
+        chip = f" [ctx={context}]" if context else ""
+        lines.append(f"- [{str(finding.get('severity') or 'medium').upper()}] {rule} @ {where}{chip} — {detail}")
     if len(findings) > MAX_FINDINGS:
         lines.append(
             f"- … {len(findings) - MAX_FINDINGS} more; full report: "
             "`python -m codeark.cli scan <repo> --formats html`"
         )
+    lines.append(_engine_meta())
     return "\n".join(lines)
 
 
