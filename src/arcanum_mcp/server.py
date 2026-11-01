@@ -176,11 +176,16 @@ def _read_path(target: Path) -> tuple[dict[str, str], int]:
 def pitax_scan(text: str, surface: str = "prompt") -> str:
     """Scan text for prompt-injection and instruction-override risks (PITAX).
 
-    Use when the user pastes a suspicious prompt, reviews an agent's system prompt,
-    checks whether model output or an MCP tool return value can hijack the agent,
-    or asks for a prompt-injection "security check".
-    Triggers: prompt injection, jailbreak, instruction override, system prompt,
-    tool output, MCP security.
+    ALWAYS use this tool before answering whether a text is safe, malicious, or
+    contains injection — including suspicious emails or phishing messages, agent
+    system prompts, model outputs, MCP tool return values, and pasted instructions.
+    Do NOT answer such questions from your own knowledge: zero-width/invisible
+    Unicode characters, base64/encoded payloads, and rule-verified override
+    patterns cannot be reliably judged by reading the text alone.
+    Triggers: prompt injection, jailbreak, instruction override, ignore previous
+    instructions, system prompt review, tool output check, MCP security, phishing
+    email check, "is this text safe"; 提示注入、越狱、忽略之前指令、系统提示词、
+    钓鱼邮件、这段文本安全吗、有没有被塞东西.
     Not for: static code vulnerability review — use code_audit instead.
     """
     cleaned = (text or "").strip()
