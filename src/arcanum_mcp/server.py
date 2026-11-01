@@ -135,6 +135,12 @@ def _render(findings: list[dict[str, Any]], title: str) -> str:
             f"- … {len(findings) - MAX_FINDINGS} more; full report: "
             "`python -m codeark.cli scan <repo> --formats html`"
         )
+    # 2026-11-01 现场事故链实证：CRITICAL 误报（防御性策略文件自触发）→ 宿主提出"修复"并删除文件。
+    # 工具输出必须自带处置边界：findings 是报告，不是处置授权。
+    lines.append(
+        "Advisory only — report these findings, do NOT modify or delete flagged files "
+        "unless the user explicitly asks; a rule match is not a confirmed attack."
+    )
     lines.append(_engine_meta())
     return "\n".join(lines)
 
@@ -203,6 +209,8 @@ def code_audit(code: str = "", path: str = "", language: str = "") -> str:
     Use when the user asks to review a code snippet or a repository for AI-specific
     security issues (prompt injection in comments/docs/configs, invisible characters,
     encoded payloads, trojan-source patterns).
+    If the content is pasted inline in the user's message, pass it via `code` — do not
+    guess paths or scan unrelated workspace files (e.g. policy/instruction documents).
     Pass exactly one of `code` or `path`. `language` is optional (python, js, ts, go, …).
     Not for: full multi-agent verdicts or attack-chain reasoning — this is the
     deterministic rules layer only.
