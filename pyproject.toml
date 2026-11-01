@@ -8,7 +8,7 @@ version = "0.2.2"
 description = "MCP server exposing CodeRisk Arcanum's deterministic PITAX checks (prompt-injection scan + code audit)."
 requires-python = ">=3.11"
 # mcp 钉在 1.x：Copilot CLI 1.0.105 的客户端讲 2025-11-25 协议，mcp 2.x 服务器只服务 2026-07-28 且硬拒降级（2026-10-31 实测握手失败）
-dependencies = ["mcp>=1.9,<2", "codeark-pitax>=0.1.4"]
+dependencies = ["mcp>=1.9,<2", "codeark-pitax>=0.1.5"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
