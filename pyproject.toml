@@ -12,10 +12,9 @@ dependencies = ["mcp>=1.9,<2", "codeark-pitax>=0.1.5"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
-# Engine dependency. Not on PyPI yet: installing this extra pulls the full engine
-# (strands-agents, pydantic). The slim, zero-dependency `codeark-pitax` wheel is the
-# intended one-command story; until then ARCA_SPARK_PATH works for local checkouts.
-spark = ["codeark @ git+https://github.com/a9320/arcanum-spark"]
+# 不再提供 `spark` extra：PyPI 拒收含 git 直链的元数据（2026-11-03 实测 400
+# "Can't have direct dependency"）。需要完整引擎时用本地 checkout + ARCA_SPARK_PATH，
+# 或 `pip install codeark @ git+https://github.com/a9320/arcanum-spark`（在 PyPI 之外装）。
 
 [project.scripts]
 arcanum-mcp = "arcanum_mcp.__main__:main"
