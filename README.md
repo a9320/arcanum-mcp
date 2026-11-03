@@ -19,6 +19,26 @@ Both call the same deterministic rule engine as the `arcanum-spark` CLI
 Responses are capped at the top 5 findings plus counts; the full report is one CLI
 command away.
 
+## Quick start (PyPI, no checkout)
+
+```bash
+uvx arcanum-mcp        # starts the stdio MCP server directly (no subcommand)
+```
+
+```json
+{
+  "mcpServers": {
+    "arcanum-security": {
+      "command": "uvx",
+      "args": ["arcanum-mcp"]
+    }
+  }
+}
+```
+
+No environment variables are required; the server makes no network calls. If you prefer
+pip: `pip install arcanum-mcp && arcanum-mcp`.
+
 ## Install (GitHub Copilot plugin)
 
 ```bash
