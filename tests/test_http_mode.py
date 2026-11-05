@@ -14,7 +14,7 @@ import sys
 import time
 from pathlib import Path
 
-import httpx2
+import httpx
 import pytest
 
 from arcanum_mcp.server import _token_guard
@@ -115,10 +115,10 @@ def test_http_mode_end_to_end_with_token(tmp_path):
         from mcp.client.streamable_http import streamable_http_client
 
         async def talk(auth_header: dict[str, str] | None, call: bool) -> int:
-            http = httpx2.AsyncClient(headers=auth_header or {})
+            http = httpx.AsyncClient(headers=auth_header or {})
             async with streamable_http_client(
                 f"http://127.0.0.1:{port}/mcp", http_client=http
-            ) as (r, w):
+            ) as (r, w, _):
                 async with ClientSession(r, w) as s:
                     await s.initialize()
                     if not call:

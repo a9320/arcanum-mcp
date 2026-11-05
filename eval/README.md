@@ -1,12 +1,12 @@
-# Tool-routing evaluation (v0.1)
+# Tool-routing evaluation (v0.2)
 
 Does the model call the right tool, with the right arguments, every time? Tool
 descriptions decide that, so they need a test, not an opinion.
 
 ## Method
 
-- 12 cases (`routing_cases.json`): 6 expect `pitax_scan`, 3 expect `code_audit`,
-  3 expect no tool at all.
+- 42 cases (`routing_cases.json`) over five tools: `pitax_scan` (PS), `code_audit` (CA),
+  `docs_scan` (DS), `dep_scan` (DP), `rank_hypotheses` (RH), plus negatives (N, no tool).
 - Each case runs **N=3**; a case is unstable if the three runs disagree.
 - Metrics: tool-choice accuracy, false-invocation rate (negatives), argument
   accuracy, instability, and **danger = 0** (no tool call that writes, deletes, or

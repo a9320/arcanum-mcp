@@ -4,14 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arcanum-mcp"
-version = "0.2.2"
-description = "MCP server exposing CodeRisk Arcanum's deterministic PITAX checks (prompt-injection scan + code audit)."
+version = "0.3.0"
+description = "MCP server exposing CodeRisk Arcanum's deterministic checks: PITAX prompt-injection scan, code audit, Office document inspection, dependency vulnerability check."
 requires-python = ">=3.11"
 # mcp 钉在 1.x：Copilot CLI 1.0.105 的客户端讲 2025-11-25 协议，mcp 2.x 服务器只服务 2026-07-28 且硬拒降级（2026-10-31 实测握手失败）
-dependencies = ["mcp>=1.9,<2", "codeark-pitax>=0.1.5"]
+# codeark-pitax>=0.2.0：docs_scan/dep_scan 的引擎进 slim 包（发布顺序必须先 wheel 后本包）
+dependencies = ["mcp>=1.9,<2", "codeark-pitax>=0.2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio"]
+# rank_hypotheses（Laya 假设排序）运行依赖：torch CPU 版即可（vendor rl_agent_api
+# 自带加载逻辑）。checkpoint 不随包分发——GitHub Release `laya-checkpoints` 手动
+# 下载 + ARCA_LAYA_PATH 指路（保持零网络安装纪律）
+laya = ["torch>=2.0", "transformers>=4.40", "safetensors>=0.4"]
 # 不再提供 `spark` extra：PyPI 拒收含 git 直链的元数据（2026-11-03 实测 400
 # "Can't have direct dependency"）。需要完整引擎时用本地 checkout + ARCA_SPARK_PATH，
 # 或 `pip install codeark @ git+https://github.com/a9320/arcanum-spark`（在 PyPI 之外装）。
