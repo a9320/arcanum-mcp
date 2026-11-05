@@ -1,0 +1,15 @@
+# arcanum-mcp — ownership of agent-facing surfaces
+# MCP 服务与插件配置是宿主 agent 的输入面：改动必须过 owner 审阅。
+# 配套闸门（在 arcanum-spark）：scripts/policy_ownership_gate.py。
+
+/src/arcanum_mcp/          @a9320
+/plugins/                  @a9320
+/marketplace.json          @a9320
+/eval/                     @a9320
+
+# agent-facing 策略文件（一旦出现必须在此认领）
+/AGENTS.md                 @a9320
+/CLAUDE.md                 @a9320
+/.cursor/rules             @a9320
+/.github/copilot-instructions.md @a9320
+/prompts.yaml              @a9320
