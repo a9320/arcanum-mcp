@@ -23,8 +23,19 @@ happened to sequence its calls correctly). Report instability, not just accuracy
 
 ## Running it
 
-No runner ships yet. Until one does, run the cases by hand against a Copilot session
-(or any MCP client with a model) and score them with the metric definitions above:
+`eval/routing_runner.py` (ships since 2026-11-06) — zero-dependency, read-only,
+offline. It drives the case set and parses Copilot CLI session events
+(`~/.copilot/session-state/*/events.jsonl`) into the metric table. Two modes:
+
+```bash
+# 1) print the case prompts to paste into a session (one case per fresh session, N=3)
+python eval/routing_runner.py --list
+
+# 2) score finished sessions (markdown table; --json for the raw record)
+python eval/routing_runner.py --sessions ~/.copilot/session-state
+```
+
+Manual scoring stays valid for other clients — the per-case shape is:
 
 ```text
 case  run1  run2  run3   choice  args  notes
@@ -32,9 +43,15 @@ PS04  ok    ok    ok     3/3     ok    tool-return injection
 N02   none  none  none   3/3     —     correctly not invoked
 ```
 
-A runner needs a model endpoint and an MCP client; both are environment-specific, so
-the case set and the scoring rules come first. When the slim engine wheel lands, the
-runner becomes a small script in this directory.
+Details the runner enforces: turns are split by `user.message`; only calls with
+`mcpServerName=arcanum-security` count as tool choices (local tools like `bash` are
+reported separately and never scored); cases whose prompt did not appear are marked
+NOT-RUN and stay out of the denominator; a case with mixed outcomes across runs is
+UNSTABLE; tool calls in turns that match no case are counted as
+`unmatched_tool_turns` (contamination guard, not scored); `danger` is 0 by
+construction (the server's tools are read-only) and path-argument calls are reported
+verbatim. A `--list` run against the 42-case set is the fastest way to see whether a
+new host's routing is worth measuring.
 
 ## Reading the results
 

@@ -1,0 +1,48 @@
+# arcanum-mcp CI（2026-11-06 首次挂载）：零网络、零模型。
+# 结构上分两步：
+#   1) 从兄弟仓 arcanum-spark 现场构建 slim wheel（codeark-pitax 0.2.0）并安装——
+#      既验证"分发物可从唯一源生成"，又满足本包声明依赖 codeark-pitax>=0.2.0
+#      （PyPI 尚未发布 0.2.0 期间 CI 不依赖公网发布状态）；
+#   2) pytest 全量：工具级锚 + 51 例 bench parity（对着 spark 仓的真实基准跑，
+#      ARCA_SPARK_PATH 指向 checkout，parity 不会因环境缺失而静默跳过）。
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout arcanum-spark (engine + benchmark source)
+        uses: actions/checkout@v4
+        with:
+          repository: a9320/arcanum-spark
+          path: arcanum-spark
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Build slim engine from the single source (codeark-pitax 0.2.0)
+        run: |
+          python arcanum-spark/scripts/build_slim_pitax.py --out "$RUNNER_TEMP/slim" --no-wheel
+          pip install "$RUNNER_TEMP/slim/codeark-pitax"
+
+      - name: Install package + dev deps
+        run: pip install -e ".[dev]"
+
+      # bench parity 锚要求 ARCA_SPARK_PATH 可达且基准文件存在；
+      # 这一步同时验证"51 例基准逐例重跑"在干净 CI 上成立。
+      - name: Full test suite (tools + bench parity + routing guards)
+        env:
+          ARCA_SPARK_PATH: ${{ github.workspace }}/arcanum-spark
+        run: python -m pytest tests/ -q
+
+      - name: Policy file ships with plugin (AGENTS.md coverage anchor)
+        run: python -m pytest tests/test_plugin_manifest.py -q
