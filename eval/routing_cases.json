@@ -271,8 +271,8 @@
     {
       "id": "RH01",
       "expected_tool": "rank_hypotheses",
-      "prompt": "我让模型提了 6 条漏洞假设，验证预算只够先跑 3 条，帮我排个验证顺序（JSON 已贴好，含 title/vuln_type/file_path/attack_path）",
-      "note": "verify-budget ordering ask; Laya ranker input (ARCA_LAYA_PATH); source: gate v1/v1.2 acceptance scenario (verify budget allocation)"
+      "prompt": "我让模型提了 6 条漏洞假设，验证预算只够先跑 3 条，帮我排个验证顺序：[{\"id\": \"H1\", \"title\": \"SQL string concat in login query\", \"vuln_type\": \"SQLI\", \"file_path\": \"src/auth.py\", \"attack_path\": \"username param -> f-string query\"}, {\"id\": \"H2\", \"title\": \"doc poisoning echo of rule hit\", \"vuln_type\": \"PIT-N-06\", \"file_path\": \"docs/spec.md\", \"attack_path\": \"markdown instruction override\"}, {\"id\": \"H3\", \"title\": \"path traversal in file download\", \"vuln_type\": \"PATH-TRAV\", \"file_path\": \"src/files.py\", \"attack_path\": \"filename param -> open()\"}, {\"id\": \"H4\", \"title\": \"SSRF in webhook fetcher\", \"vuln_type\": \"SSRF\", \"file_path\": \"src/webhook.py\", \"attack_path\": \"url field -> requests.get\"}, {\"id\": \"H5\", \"title\": \"insecure deserialization\", \"vuln_type\": \"DESER\", \"file_path\": \"src/cache.py\", \"attack_path\": \"pickle.loads on cache blob\"}, {\"id\": \"H6\", \"title\": \"command injection in report builder\", \"vuln_type\": \"CMDI\", \"file_path\": \"src/report.py\", \"attack_path\": \"title param -> subprocess\"}]",
+      "note": "verify-budget ordering ask; prompt carries the hypotheses inline (self-contained); source: gate v1/v1.2 acceptance scenario"
     },
     {
       "id": "RH02",

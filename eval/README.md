@@ -43,9 +43,10 @@ PS04  ok    ok    ok     3/3     ok    tool-return injection
 N02   none  none  none   3/3     —     correctly not invoked
 ```
 
-Details the runner enforces: turns are split by `user.message`; only calls with
-`mcpServerName=arcanum-security` count as tool choices (local tools like `bash` are
-reported separately and never scored); cases whose prompt did not appear are marked
+Details the runner enforces: turns are split by `user.message`; only calls whose
+`mcpServerName` starts with `arcanum` count as tool choices (plugin installs use
+`arcanum-security`, self-hosted/eval instances may use other `arcanum-*` names; local
+tools like `bash` are reported separately and never scored); cases whose prompt did not appear are marked
 NOT-RUN and stay out of the denominator; a case with mixed outcomes across runs is
 UNSTABLE; tool calls in turns that match no case are counted as
 `unmatched_tool_turns` (contamination guard, not scored); `danger` is 0 by

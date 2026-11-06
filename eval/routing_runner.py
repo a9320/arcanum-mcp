@@ -36,7 +36,9 @@ from collections import defaultdict
 from pathlib import Path
 
 VALID_SURFACES = {"prompt", "system_prompt", "agent_instructions", "tool_output", "doc"}
-SERVER_NAME = "arcanum-security"
+# 服务器名族：插件装的是 arcanum-security；评测/自托管实例可能叫 arcanum-eval 等。
+# 按前缀识别（2026-11-06 实测：硬编码单一名字会把评测实例的调用全部漏计）。
+SERVER_PREFIX = "arcanum"
 
 
 def load_cases(path: Path) -> dict:
@@ -74,9 +76,9 @@ def parse_session(path: Path) -> list[dict]:
             current = {"prompt": str(data.get("content") or ""), "tools": [], "other_tools": []}
             turns.append(current)
         elif et == "tool.execution_start" and current is not None:
-            server = str(data.get("mcpServerName") or "")
+            server = str(data.get("mcpServerName") or "").strip().lower()
             name = data.get("mcpToolName") or data.get("toolName")
-            if server == SERVER_NAME and data.get("mcpToolName"):
+            if server.startswith(SERVER_PREFIX) and data.get("mcpToolName"):
                 current["tools"].append(
                     {"name": str(data["mcpToolName"]), "args": data.get("arguments") or {}}
                 )
