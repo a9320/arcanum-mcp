@@ -2,6 +2,12 @@
 
 > 状态：第一轮完成（39/42 例，每例 1 次）。N=3 稳定性轮与 instructed（AGENTS.md 政策）轮**未跑**。
 > 方法与指标口径见 `eval/README.md`；runner=`eval/routing_runner.py`。
+>
+> **⚠️ 形态修正（2026-11-07 取证）**：本轮并非纯 description-only——`.github/copilot-instructions.md`
+> （旧**两工具**政策，只提 pitax_scan/code_audit）**全程在场**（文件 ctime 停留在 11-01 未再动，
+> 而 AGENTS.md ctime=11-06 22:57 证实其被移走又还原）。真实形态 = "AGENTS.md 移走 + 旧两工具
+> instructions 在场"。DS/DP 族零调用 miss 可能部分归因于旧政策未提及 docs_scan/dep_scan/rank_hypotheses。
+> 纯隐式（两件全移走）基线**未取得**；本轮数字对照 instructed 轮时须带此注记。
 
 ## 环境
 
