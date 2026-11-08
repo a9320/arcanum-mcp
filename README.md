@@ -1,7 +1,13 @@
 # arcanum-mcp
 
-Four deterministic security tools for AI-assisted coding, exposed over MCP. All run
+Five deterministic security tools for AI-assisted coding, exposed over MCP. All run
 **locally**: no model calls, no network, nothing uploaded.
+
+> **中文简介**：面向 AI 编码工作流的确定性提示注入扫描 MCP，五个工具：`pitax_scan`（文本注入面）、
+> `code_audit`（代码/注释/配置与 agent 规则文件——注释内隐藏字符与编码载荷归此）、`docs_scan`
+> （Word/Excel/PPT 容器级扫描）、`dep_scan`（依赖钉版漏洞，离线 OSV 比对）、`rank_hypotheses`
+> （Laya 决策模型假设排序，order-only 只排序不删改）。纯本地规则、零上传、不调用模型、不发起
+> 网络请求；配套 `AGENTS.md` 政策文件随插件分发。
 
 Prompt injection in *tool return values* is a classic attack path for agent setups — an MCP
 server that reads untrusted repositories is itself a natural target. This server stays
