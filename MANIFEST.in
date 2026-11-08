@@ -1,0 +1,8 @@
+include README.md
+include LICENSE
+include marketplace.json
+recursive-include eval *.py *.json *.jsonl *.md
+recursive-include plugins *
+recursive-include tests *.py *.json
+global-exclude *.pyc *.pyo
+prune **/__pycache__

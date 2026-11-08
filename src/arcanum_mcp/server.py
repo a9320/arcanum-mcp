@@ -1,4 +1,4 @@
-"""Arcanum Security MCP server — four deterministic tools, one job each (v0.2).
+"""Arcanum Security MCP server — five deterministic tools, one job each (v0.3).
 
 Design constraints:
 - **Engine reuse, not a second rule set.** Every tool calls the same deterministic
@@ -8,14 +8,26 @@ Design constraints:
 - **Small returns.** Summary + top findings + where to get the full report.
   Optional `formats` writes report artifacts (json/sarif/markdown/html) locally —
   generation only, never published anywhere.
-- **stdio only.** Scanned content never leaves the machine.
+- **Evidence is not echoed.** File-derived findings (code_audit / docs_scan) report
+  a sha256/length token instead of the matched text: tool output is model input,
+  and an unredacted payload would re-enter the context it was meant to protect.
+  Raw evidence stays in the local report artifacts. pitax_scan is the exception —
+  its input is the caller's own pasted text, so echoing adds no exposure.
+- **Boundary-safe walking.** Directory scans never follow symlinks or
+  junctions/reparse points and enforce entry/depth/total-byte caps; a file outside
+  the scan root is never read (2026-11-08 review finding, reproduced).
+- **stdio only (default).** Scanned content never leaves the machine; the optional
+  HTTP mode is token-gated and documented as a different data boundary.
 
 MCP SDK note: `mcp>=2` renamed `FastMCP` to `MCPServer`; `mcp<2` still ships
 `FastMCP`. `build_server()` accepts either.
 """
 from __future__ import annotations
 
+import hashlib
 import os
+import secrets
+import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +37,11 @@ MAX_TEXT = 20_000
 MAX_FINDINGS = 5
 MAX_FILES = 200
 MAX_FILE_BYTES = 512 * 1024
+# 有界遍历（对齐 arcanum-spark office_scan 的四道闸；2026-11-08 评审 P1-4）
+MAX_TOTAL_BYTES = 32 * 1024 * 1024
+MAX_DEPTH = 16
+MAX_ENTRIES = 200_000
+_FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 _REPORT_FORMATS = {"json", "sarif", "markdown", "html"}
 _REPORT_ROOT = Path.home() / ".arcanum" / "mcp-reports"
@@ -157,7 +174,22 @@ def _engine_meta() -> str:
         return "engine=unavailable"
 
 
-def _render(findings: list[dict[str, Any]], title: str, full_hint: str = "") -> str:
+def _evidence_token(text: Any) -> str:
+    """脱敏证据令牌：不含原文，仅摘要+长度（原始证据留在本地 report artifact）。
+
+    2026-11-08 评审 P0-1：工具输出是模型的输入，安全扫描器不能把命中原文
+    （尤其文档/代码里模型未见过的内容）原样送回上下文。sha256 前 10 hex
+    足以让用户/调用方在本地 artifact 中定位同一条证据。
+    """
+    value = " ".join(str(text or "").split())
+    if not value:
+        return ""
+    digest = hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:10]
+    return f"sha256:{digest} len={len(value)}"
+
+
+def _render(findings: list[dict[str, Any]], title: str, full_hint: str = "",
+            echo_snippet: bool = False) -> str:
     if not findings:
         return f"{title}: no PITAX findings (deterministic rules; no model called)."
     counts: dict[str, int] = {}
@@ -179,9 +211,10 @@ def _render(findings: list[dict[str, Any]], title: str, full_hint: str = "") -> 
         location = str(finding.get("file") or "?")
         line = finding.get("line")
         where = f"{location}:{line}" if line else location
-        detail = _clip(
-            finding.get("code_snippet") or finding.get("title") or finding.get("description"), 140
-        )
+        raw = finding.get("code_snippet") or finding.get("title") or finding.get("description")
+        # echo_snippet only for caller-supplied text (pitax_scan); file-derived
+        # findings expose a token, never the matched text itself.
+        detail = _clip(raw, 140) if echo_snippet else _evidence_token(raw)
         extra = finding.get("pitax")
         context = extra.get("context") if isinstance(extra, dict) else ""
         chip = f" [ctx={context}]" if context else ""
@@ -301,32 +334,113 @@ def _is_ai_config_path(path: Path) -> bool:
     return p.endswith((".cursorrules", ".cursor/rules", "claude.md", "clinerules.md"))
 
 
-def _read_path(target: Path) -> tuple[dict[str, str], int]:
-    """Read a file or a directory tree (bounded: file count, size, skip dirs)."""
+def _path_is_reparse(path: Path) -> bool:
+    """symlink 或 Windows junction/reparse point（目录边界不可穿越）。
+
+    2026-11-08 评审 P0-2：`rglob("*") + is_file()` 会跟随 junction/symlink，
+    把仓库外文件读进扫描结果（已用 junction 复现）。目录遍历必须跳过一切
+    reparse point；os.lstat 读的是链接本身，不追目标。
+    """
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return True
+    if stat.S_ISLNK(st.st_mode):
+        return True
+    return bool(getattr(st, "st_file_attributes", 0) & _FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _walk_bounded(root: Path) -> tuple[list[Path], dict[str, Any]]:
+    """有界、边界安全的目录遍历（scandir 栈式；对齐 arcanum-spark office_scan）。
+
+    - 不跟随 symlink/junction（目录边界）
+    - 入口数/深度硬闸：超限即停，在 caps["stopped_by"] 里声明（不静默截断）
+    - 产出的每个路径 resolve 后必须仍在 root 内（双保险）
+    """
+    try:
+        root_resolved = root.resolve()
+    except OSError:
+        return [], {"entries": 0, "stopped_by": "unresolvable-root"}
+    out: list[Path] = []
+    caps: dict[str, Any] = {"entries": 0, "stopped_by": ""}
+    stack: list[tuple[Path, int]] = [(root, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > MAX_DEPTH:
+            caps["stopped_by"] = caps["stopped_by"] or "depth"
+            continue
+        try:
+            with os.scandir(current) as it:
+                for entry in it:
+                    caps["entries"] += 1
+                    if caps["entries"] > MAX_ENTRIES:
+                        caps["stopped_by"] = caps["stopped_by"] or "entries"
+                        return out, caps
+                    try:
+                        if _path_is_reparse(Path(entry.path)):
+                            continue
+                        if entry.is_dir(follow_symlinks=False):
+                            child = Path(entry.path)
+                            if any(part in _SKIP_DIRS for part in child.parts):
+                                continue
+                            stack.append((child, depth + 1))
+                        elif entry.is_file(follow_symlinks=False):
+                            path = Path(entry.path)
+                            try:
+                                path.resolve().relative_to(root_resolved)
+                            except (OSError, ValueError):
+                                continue  # 越界——永不读取
+                            out.append(path)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+    return out, caps
+
+
+def _read_path(target: Path) -> tuple[dict[str, str], int, dict[str, Any]]:
+    """Read a file or a directory tree (bounded + boundary-safe).
+
+    Returns (files, skipped, caps). caps["stopped_by"] 非空时必须向上报告——
+    部分扫描不能被当成完整扫描。显式传入的文件参数按用户意图读取；目录遍历
+    永不穿越 symlink/junction。
+    """
     if target.is_file():
         candidates = [target]
+        caps: dict[str, Any] = {"entries": 1, "stopped_by": ""}
     else:
-        candidates = []
-        for path in sorted(target.rglob("*")):
-            if not path.is_file():
-                continue
-            if any(part in _SKIP_DIRS for part in path.parts):
-                continue
-            if path.suffix.lower() not in _SOURCE_EXTS and not _is_ai_config_path(path):
-                continue
-            candidates.append(path)
+        walked, caps = _walk_bounded(target)
+        candidates = sorted(
+            (
+                p for p in walked
+                if not any(part in _SKIP_DIRS for part in p.parts)
+                and (p.suffix.lower() in _SOURCE_EXTS or _is_ai_config_path(p))
+            ),
+            key=str,
+        )
 
     files: dict[str, str] = {}
-    skipped = max(0, len(candidates) - MAX_FILES)
-    for path in candidates[:MAX_FILES]:
+    skipped = 0
+    total_bytes = 0
+    for path in candidates:
+        if len(files) >= MAX_FILES:
+            skipped += 1
+            caps["stopped_by"] = caps["stopped_by"] or "files"
+            continue
         try:
-            if path.stat().st_size > MAX_FILE_BYTES:
+            size = path.stat().st_size
+            if size > MAX_FILE_BYTES:
                 skipped += 1
                 continue
+            if total_bytes + size > MAX_TOTAL_BYTES:
+                skipped += 1
+                caps["stopped_by"] = caps["stopped_by"] or "total_bytes"
+                continue
             files[str(path)] = path.read_text(encoding="utf-8", errors="replace")
+            total_bytes += size
         except OSError:
             skipped += 1
-    return files, skipped
+    return files, skipped, caps
 
 
 def pitax_scan(text: str, surface: str = "prompt") -> str:
@@ -363,7 +477,7 @@ def pitax_scan(text: str, surface: str = "prompt") -> str:
     except Exception as exc:  # scanner errors must never crash the host session
         return f"pitax_scan: scanner error ({type(exc).__name__}): {_clip(exc, 200)}"
     suffix = f" [{'; '.join(notes)}]" if notes else ""
-    return _render(findings, f"PITAX scan · surface={key}{suffix}")
+    return _render(findings, f"PITAX scan · surface={key}{suffix}", echo_snippet=True)
 
 
 def code_audit(code: str = "", path: str = "", language: str = "", formats: str = "") -> str:
@@ -402,13 +516,14 @@ def code_audit(code: str = "", path: str = "", language: str = "", formats: str 
         except Exception as exc:  # scanner errors must never crash the host session
             return f"code_audit: scanner error ({type(exc).__name__}): {_clip(exc, 200)}"
         suffix = f" [{'; '.join(notes)}]" if notes else ""
-        body = _render(findings, f"Code audit · snippet ({language or 'auto'}){suffix}")
+        body = _render(findings, f"Code audit · snippet ({language or 'auto'}){suffix}",
+                       echo_snippet=True)
         return _append_artifacts(body, "code_audit", findings, formats, {"tool": "code_audit"})
 
     target = Path(target_arg).expanduser()
     if not target.exists():
         return f"code_audit: path not found: {target_arg}"
-    files, skipped = _read_path(target)
+    files, skipped, caps = _read_path(target)
     if not files:
         return f"code_audit: no supported source files under {target_arg}."
     try:
@@ -417,10 +532,11 @@ def code_audit(code: str = "", path: str = "", language: str = "", formats: str 
         return _engine_error(exc)
     except Exception as exc:  # scanner errors must never crash the host session
         return f"code_audit: scanner error ({type(exc).__name__}): {_clip(exc, 200)}"
-    meta = {"tool": "code_audit", "files_scanned": len(files), "skipped": skipped}
+    meta = {"tool": "code_audit", "files_scanned": len(files), "skipped": skipped, "caps": caps}
+    caps_note = f", stopped_by={caps['stopped_by']}" if caps.get("stopped_by") else ""
     body = _render(
         findings,
-        f"Code audit · {len(files)} file(s) from {target.name} ({skipped} skipped)",
+        f"Code audit · {len(files)} file(s) from {target.name} ({skipped} skipped{caps_note})",
     )
     return _append_artifacts(body, "code_audit", findings, formats, meta)
 
@@ -497,11 +613,11 @@ def dep_scan(path: str, formats: str = "") -> str:
 
     if target.is_file():
         manifests = {str(target): target.read_text(encoding="utf-8", errors="replace")}
+        dep_caps: dict[str, Any] = {"entries": 1, "stopped_by": ""}
     else:
+        walked, dep_caps = _walk_bounded(target)
         manifests = {}
-        for p in sorted(target.rglob("*")):
-            if not p.is_file():
-                continue
+        for p in sorted(walked, key=str):
             if any(part in _SKIP_DIRS for part in p.parts):
                 continue
             base = p.name.lower()
@@ -524,10 +640,14 @@ def dep_scan(path: str, formats: str = "") -> str:
         return _engine_error(exc)
     except Exception as exc:  # scanner errors must never crash the host session
         return f"dep_scan: scanner error ({type(exc).__name__}): {_clip(exc, 200)}"
-    body = _render_deps(findings, f"Dependency scan · {len(manifests)} manifest(s) from {target.name}")
+    body = _render_deps(
+        findings,
+        f"Dependency scan · {len(manifests)} manifest(s) from {target.name}"
+        + (f" [stopped_by={dep_caps['stopped_by']}]" if dep_caps.get("stopped_by") else ""),
+    )
     return _append_artifacts(
         body, "dep_scan", findings, formats,
-        {"tool": "dep_scan", "manifests": len(manifests)},
+        {"tool": "dep_scan", "manifests": len(manifests), "caps": dep_caps},
     )
 
 
@@ -677,7 +797,9 @@ def _token_guard(app: Any, token: str):
             k.decode("latin-1").lower(): v.decode("latin-1")
             for k, v in scope.get("headers", [])
         }
-        if headers.get("authorization") != expected:
+        # 2026-11-08 评审 3.8：恒时比较，避免逐字节计时侧信道（P2 加固）
+        presented = headers.get("authorization") or ""
+        if not secrets.compare_digest(presented, expected):
             await send({
                 "type": "http.response.start",
                 "status": 401,

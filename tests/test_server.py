@@ -66,13 +66,14 @@ def test_read_path_skips_vendor_directories(tmp_path):
     junk.parent.mkdir()
     junk.write_text(CODE_INJECTION, encoding="utf-8")
 
-    files, skipped = srv._read_path(tmp_path)
+    files, skipped, caps = srv._read_path(tmp_path)
     assert len(files) == 1
     assert "node_modules" not in next(iter(files))
     assert skipped == 0
+    assert caps["stopped_by"] == ""
 
 
-def test_server_exposes_exactly_four_tools():
+def test_server_exposes_exactly_five_tools():
     tools = asyncio.run(srv.build_server().list_tools())
     assert {tool.name for tool in tools} == {
         "pitax_scan", "code_audit", "docs_scan", "dep_scan", "rank_hypotheses"
