@@ -94,6 +94,10 @@ def _wait_port(port: int, timeout_s: float = 15.0) -> None:
     not (SRC / "arcanum_mcp").exists() or importlib.util.find_spec("mcp") is None,
     reason="package/mcp missing",
 )
+@pytest.mark.skipif(
+    importlib.util.find_spec("codeark") is None and importlib.util.find_spec("codeark_pitax") is None,
+    reason="engine not importable — HTTP e2e needs a working scan",
+)
 def test_http_mode_end_to_end_with_token(tmp_path):
     port = _free_port()
     env = dict(os.environ)

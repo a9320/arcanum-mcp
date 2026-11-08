@@ -49,6 +49,13 @@ def test_bench_case_count_matches_ledger(bench_cases):
     assert (len(bench_cases), pos, neg) == (51, 36, 15)
 
 
+# 收集期守卫（2026-11-08 评审 P1-6 修复）：parametrize 在模块 import 时求值，
+# skipif mark 来不及生效——sdist 里没有兄弟 arcanum-spark 检出时必须显式
+# 模块级 skip，否则整个测试会话收集失败（审查方实测 0 收集即此因）。
+if not _BENCH.is_file():
+    pytest.skip(f"pitax_bench not found: {_BENCH}", allow_module_level=True)
+
+
 @pytest.mark.parametrize("case", _load_cases(), ids=lambda c: c["id"])
 def test_bench_case_parity(case, tmp_path):
     """单例：还原 (path, text) → code_audit 单文件目录扫描 → expected 逐条命中。"""

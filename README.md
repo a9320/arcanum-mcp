@@ -245,3 +245,8 @@ nothing is stored (in-memory only, 0-day retention). If that is not acceptable,
 use the default stdio mode, which never leaves the machine. Deploying this mode
 behind Azure Container Apps / API Management is the documented enterprise path
 (see arcanum-spark `docs/` and the ArcanumSec plan).
+
+**TLS required beyond localhost**: the default bind is `127.0.0.1`; the moment you
+expose this server beyond the local machine, terminate TLS in front of it (reverse
+proxy or platform ingress) — a bearer token over plain HTTP is sniffable. Token
+comparison uses `secrets.compare_digest`; keep the token long and random.

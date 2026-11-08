@@ -48,6 +48,9 @@ _REPORT_ROOT = Path.home() / ".arcanum" / "mcp-reports"
 _LAYA_PATH_ENV = "ARCA_LAYA_PATH"
 # laya CPU ~0.4s/条（EVAL-LEDGER 2026-10-07 实测）：50 条≈20s 是交互式工具的合理上限
 MAX_HYPOTHESES = 50
+# 2026-11-08 评审 3.7：输入体积上限（JSON 原文按字符计；字段在归一化时截断）
+MAX_RANK_CHARS = 64_000
+_RANK_FIELD_LIMITS = {"title": 200, "vuln_type": 64, "file_path": 500, "attack_path": 2000}
 
 _SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 _SKIP_DIRS = {
@@ -687,8 +690,19 @@ def rank_hypotheses(hypotheses: str, baseline: str = "") -> str:
     import json
     import time
 
+    raw_hyp = (hypotheses or "").strip() or "[]"
+    if len(raw_hyp) > MAX_RANK_CHARS:
+        return (
+            f"rank_hypotheses: `hypotheses` is {len(raw_hyp)} chars — over the "
+            f"{MAX_RANK_CHARS} cap; trim the evidence text and retry."
+        )
+    if len((baseline or "").strip()) > MAX_RANK_CHARS:
+        return (
+            f"rank_hypotheses: `baseline` is {len(baseline.strip())} chars — over the "
+            f"{MAX_RANK_CHARS} cap; trim it and retry."
+        )
     try:
-        items = json.loads((hypotheses or "").strip() or "[]")
+        items = json.loads(raw_hyp)
     except json.JSONDecodeError as exc:
         return f"rank_hypotheses: `hypotheses` is not valid JSON ({exc.msg} at pos {exc.pos})."
     if not isinstance(items, list) or not items:
@@ -709,11 +723,11 @@ def rank_hypotheses(hypotheses: str, baseline: str = "") -> str:
                 "required (attack_path/file_path/id optional)."
             )
         normalized.append({
-            "id": str(raw.get("id") or f"H{i + 1}"),
-            "title": str(raw.get("title") or ""),
-            "vuln_type": str(raw.get("vuln_type") or ""),
-            "file_path": str(raw.get("file_path") or ""),
-            "attack_path": str(raw.get("attack_path") or ""),
+            "id": str(raw.get("id") or f"H{i + 1}")[:64],
+            "title": str(raw.get("title") or "")[:_RANK_FIELD_LIMITS["title"]],
+            "vuln_type": str(raw.get("vuln_type") or "")[:_RANK_FIELD_LIMITS["vuln_type"]],
+            "file_path": str(raw.get("file_path") or "")[:_RANK_FIELD_LIMITS["file_path"]],
+            "attack_path": str(raw.get("attack_path") or "")[:_RANK_FIELD_LIMITS["attack_path"]],
         })
 
     baseline_rows: list[dict] = []
