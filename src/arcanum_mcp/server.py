@@ -337,7 +337,9 @@ def pitax_scan(text: str, surface: str = "prompt") -> str:
     system prompts, model outputs, MCP tool return values, and pasted instructions.
     Do NOT answer such questions from your own knowledge: zero-width/invisible
     Unicode characters, base64/encoded payloads, and rule-verified override
-    patterns cannot be reliably judged by reading the text alone.
+    patterns cannot be reliably judged by reading the text alone. Even if you can
+    decode or analyze the payload yourself, still run this scan — the finding must
+    come from the tool so it is reproducible and auditable.
     Triggers: prompt injection, jailbreak, instruction override, ignore previous
     instructions, system prompt review, tool output check, MCP security, phishing
     email check, "is this text safe"; 提示注入、越狱、忽略之前指令、系统提示词、
@@ -370,6 +372,10 @@ def code_audit(code: str = "", path: str = "", language: str = "", formats: str 
     Use when the user asks to review a code snippet or a repository for AI-specific
     security issues (prompt injection in comments/docs/configs, invisible characters,
     encoded payloads, trojan-source patterns).
+    Hidden characters, encoded payloads, or split/override instructions INSIDE code,
+    code comments, or config values are mine, not `pitax_scan`'s — if the suspicious
+    text sits in a code context (even one line like `x = 1  # <payload>`), call
+    `code_audit`.
     If the content is pasted inline in the user's message, pass it via `code` — do not
     guess paths or scan unrelated workspace files (e.g. policy/instruction documents).
     Pass exactly one of `code` or `path`. `language` is optional (python, js, ts, go, …).
