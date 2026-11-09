@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "arcanum-security",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "PITAX prompt-injection scan, code audit, Office document inspection, and dependency vulnerability check for AI-assisted code. Local stdio server; nothing is uploaded."
 }

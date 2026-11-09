@@ -5,13 +5,13 @@
   },
   "metadata": {
     "description": "CodeRisk Arcanum — prompt-injection and code-security tools for AI-assisted development.",
-    "version": "0.3.1"
+    "version": "0.3.2"
   },
   "plugins": [
     {
       "name": "arcanum-security",
       "description": "PITAX prompt-injection scan, code audit, Office document inspection, and dependency vulnerability check. Runs locally; no model calls, no telemetry.",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "source": "./plugins/arcanum-security"
     }
   ]

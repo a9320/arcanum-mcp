@@ -15,7 +15,11 @@ Design constraints:
   its input is the caller's own pasted text, so echoing adds no exposure.
 - **Boundary-safe walking.** Directory scans never follow symlinks or
   junctions/reparse points and enforce entry/depth/total-byte caps; a file outside
-  the scan root is never read (2026-11-08 review finding, reproduced).
+  the scan root is never read (2026-11-08 review finding, reproduced). Files are
+  opened with no-follow and the opened handle's identity is compared against the
+  walked entry, so a symlink swapped in after the walk is rejected rather than read.
+- **Bounded HTTP ingress.** HTTP mode caps request bodies (default 8 MiB) on the
+  bytes actually received, not on the declared Content-Length.
 - **stdio only (default).** Scanned content never leaves the machine; the optional
   HTTP mode is token-gated and documented as a different data boundary.
 
@@ -25,6 +29,8 @@ MCP SDK note: `mcp>=2` renamed `FastMCP` to `MCPServer`; `mcp<2` still ships
 from __future__ import annotations
 
 import hashlib
+import importlib
+import json
 import os
 import secrets
 import stat
@@ -41,6 +47,9 @@ MAX_FILE_BYTES = 512 * 1024
 MAX_TOTAL_BYTES = 32 * 1024 * 1024
 MAX_DEPTH = 16
 MAX_ENTRIES = 200_000
+# HTTP 入站硬闸：一遍 JSON-RPC 请求远小于此值（text 上限 20K 字符、rank 上限
+# 64K 字符），8 MiB 只挡内存消耗型请求，不改变任何合法调用。
+MAX_HTTP_BODY = 8 * 1024 * 1024
 _FILE_ATTRIBUTE_REPARSE_POINT = 0x400
 
 _REPORT_FORMATS = {"json", "sarif", "markdown", "html"}
@@ -235,18 +244,48 @@ def _render(findings: list[dict[str, Any]], title: str, full_hint: str = "",
     return "\n".join(lines)
 
 
+def _dep_db_note() -> str:
+    """依赖漏洞库范围自述（2026-11-09 评审 P2：DB 版本透明度）。
+
+    dep_scan 是确定性比对，但"库里没有"不等于"不存在漏洞"。调用方必须知道
+    命中来自哪套库、覆盖面多大，才能把"无命中"当成证据而不是结论。
+    """
+    module = None
+    for mod_name in ("codeark_pitax.dep_scan", "codeark.tools.dep_scan"):
+        try:
+            module = importlib.import_module(mod_name)
+            break
+        except ImportError:
+            continue
+    if module is None:
+        return "DB: unavailable (scanner import failed)"
+    builtin = len(getattr(module, "_LOCAL_VULN_DB", {}) or {})
+    try:
+        osv_keys = len(json.loads(getattr(module, "_OSV_INDEX_JSON", "{}")))
+    except Exception:
+        osv_keys = 0
+    osv_state = f"{osv_keys} ecosystem key(s)" if osv_keys else "empty"
+    return (
+        f"DB: builtin list ({builtin} package entries) + OSV local index ({osv_state}); "
+        "no network lookup — absence of findings is not proof of safety."
+    )
+
+
 def _render_deps(findings: list[dict[str, Any]], title: str) -> str:
     """dep findings 渲染：package@version + CWE + 修复建议（对齐 _render 的处置边界）。"""
     if not findings:
-        return f"{title}: no known-vulnerable dependencies (local OSV/builtin DB; no network)."
+        return f"{title}: no known-vulnerable dependencies.\n{_dep_db_note()}"
     lines = [f"{title}: {len(findings)} vulnerable package(s). Top {min(len(findings), MAX_FINDINGS)}:"]
     for finding in findings[:MAX_FINDINGS]:
         where = f"{finding.get('file') or '?'}"
+        source = str(finding.get("source") or "")
+        db_chip = f" [db={source}]" if source else ""
         lines.append(
             f"- [{str(finding.get('severity') or 'high').upper()}] "
             f"{finding.get('rule') or finding.get('cwe')} @ {where} — "
             f"{finding.get('package')}=={finding.get('version')}: "
             f"{_clip(finding.get('description'), 120)} · fix: {_clip(finding.get('fix'), 80)}"
+            f"{db_chip}"
         )
     if len(findings) > MAX_FINDINGS:
         lines.append(
@@ -256,6 +295,7 @@ def _render_deps(findings: list[dict[str, Any]], title: str) -> str:
     lines.append(
         "Advisory only — upgrade decisions are yours; verify the CVE before acting on it."
     )
+    lines.append(_dep_db_note())
     return "\n".join(lines)
 
 
@@ -401,6 +441,34 @@ def _walk_bounded(root: Path) -> tuple[list[Path], dict[str, Any]]:
     return out, caps
 
 
+def _read_verified(path: Path, limit: int) -> tuple[str | None, int]:
+    """按已校验句柄读取文件，关掉 walk→open 之间的 TOCTOU 窗口（2026-11-09 P2）。
+
+    顺序 = open（POSIX 带 O_NOFOLLOW）→ fstat → lstat 比对 (st_dev, st_ino)：
+    - 遍历后被换成 symlink/junction 的路径，句柄与目录项身份不同 ⇒ 拒绝；
+    - 换回同一 inode（硬链接）是同一份内容，放行无害；
+    - 大小以 fstat 为准，超限返回 (None, size) 由调用方计 skip。
+
+    Windows 没有 O_NOFOLLOW，身份比对是那一侧的唯一闸门（junction 复现过）。
+    """
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(path, flags)
+    try:
+        opened = os.fstat(fd)
+        walked = os.lstat(path)
+        if (opened.st_dev, opened.st_ino) != (walked.st_dev, walked.st_ino):
+            raise OSError(f"file identity changed between walk and open: {path}")
+        if opened.st_size > limit:
+            return None, opened.st_size
+        with os.fdopen(fd, "rb") as fh:
+            fd = -1  # context manager owns the descriptor now
+            data = fh.read(limit + 1)[:limit]
+    finally:
+        if fd != -1:
+            os.close(fd)
+    return data.decode("utf-8", errors="replace"), len(data)
+
+
 def _read_path(target: Path) -> tuple[dict[str, str], int, dict[str, Any]]:
     """Read a file or a directory tree (bounded + boundary-safe).
 
@@ -409,6 +477,12 @@ def _read_path(target: Path) -> tuple[dict[str, str], int, dict[str, Any]]:
     永不穿越 symlink/junction。
     """
     if target.is_file():
+        # 显式文件参数按用户意图读取：先把链接解到实体，再进 _read_verified
+        # （O_NOFOLLOW 会拒绝末段 symlink；显式传入时那不是越界，是调用方的选择）。
+        try:
+            target = target.resolve()
+        except OSError:
+            pass
         candidates = [target]
         caps: dict[str, Any] = {"entries": 1, "stopped_by": ""}
     else:
@@ -431,15 +505,15 @@ def _read_path(target: Path) -> tuple[dict[str, str], int, dict[str, Any]]:
             caps["stopped_by"] = caps["stopped_by"] or "files"
             continue
         try:
-            size = path.stat().st_size
-            if size > MAX_FILE_BYTES:
+            text, size = _read_verified(path, MAX_FILE_BYTES)
+            if text is None:
                 skipped += 1
                 continue
             if total_bytes + size > MAX_TOTAL_BYTES:
                 skipped += 1
                 caps["stopped_by"] = caps["stopped_by"] or "total_bytes"
                 continue
-            files[str(path)] = path.read_text(encoding="utf-8", errors="replace")
+            files[str(path)] = text
             total_bytes += size
         except OSError:
             skipped += 1
@@ -826,6 +900,59 @@ def _token_guard(app: Any, token: str):
     return guarded
 
 
+async def _reject_413(send: Any) -> None:
+    await send({
+        "type": "http.response.start",
+        "status": 413,
+        "headers": [(b"content-type", b"application/json"), (b"connection", b"close")],
+    })
+    await send({"type": "http.response.body", "body": b'{"error": "payload too large"}'})
+
+
+def _body_limit(app: Any, limit: int = MAX_HTTP_BODY):
+    """ASGI 中间件：请求体硬上限（按实际收到的字节数计，不信 Content-Length）。
+
+    2026-11-09 评审 P2：HTTP 模式此前没有请求体上限，一个超大 POST 即可吃满
+    单进程内存。声明值只用来快速拒绝；分块请求可以谎报，所以仍逐块累计兜底。
+    """
+
+    async def limited(scope: dict, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await app(scope, receive, send)
+            return
+        declared = ""
+        for key, value in scope.get("headers", []):
+            if key.lower() == b"content-length":
+                declared = value.decode("latin-1")
+                break
+        if declared.isdigit() and int(declared) > limit:
+            await _reject_413(send)
+            return
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body += message.get("body", b"")
+            if len(body) > limit:
+                await _reject_413(send)
+                return
+            if not message.get("more_body", False):
+                break
+        replayed = False
+
+        async def replay() -> dict:
+            nonlocal replayed
+            if replayed:
+                return await receive()
+            replayed = True
+            return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+        await app(scope, replay, send)
+
+    return limited
+
+
 def run_http(server: Any | None = None, *, host: str = "127.0.0.1", port: int = 8000,
              token: str | None = None) -> None:
     """以 HTTP（Streamable HTTP）形态提供服务。**必须带 token**——拒绝裸奔服务器。"""
@@ -838,7 +965,7 @@ def run_http(server: Any | None = None, *, host: str = "127.0.0.1", port: int = 
     import uvicorn
 
     s = server or build_server()
-    app = _token_guard(s.streamable_http_app(), tok)
+    app = _token_guard(_body_limit(s.streamable_http_app()), tok)
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
