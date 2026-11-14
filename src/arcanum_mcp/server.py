@@ -57,6 +57,67 @@ _REPORT_ROOT = Path.home() / ".arcanum" / "mcp-reports"
 _LAYA_PATH_ENV = "ARCA_LAYA_PATH"
 # laya CPU ~0.4s/条（EVAL-LEDGER 2026-10-07 实测）：50 条≈20s 是交互式工具的合理上限
 MAX_HYPOTHESES = 50
+
+# laya agent 按模型目录单例缓存（2026-11-14 Windows 本地验证的两个实测结论驱动）：
+# ① slim 的 score_laya 每次调用都 _load_laya_agent 重载 ~421M 模型（实测 ~22s/次），
+#   常驻 server 必须只加载一次——包装 loader 做 per-path 缓存，score_laya 循环不动
+#   （守单一事实源，不 fork 实现）；
+# ② stdio 形态下 CallToolRequest 在 anyio 线程池里做大 safetensors 加载会挂死
+#   （server 收理后无响应直至超时；同一路径函数直调与普通子线程均正常，疑为
+#   torch 加载 × Windows 管道循环交互，11-14 实测留账）——serve 前主线程预加载
+#   （__main__._prewarm）把加载挪出线程池，调用时线程池里只剩轻量推理。
+_LAYA_AGENT_CACHE: dict = {}
+_LAYA_CACHE_PATCHED = False
+
+
+def _patch_laya_agent_cache() -> None:
+    global _LAYA_CACHE_PATCHED
+    try:
+        from codeark_pitax import laya_runtime as _lr
+    except ImportError:
+        try:
+            from codeark.graph import laya_runtime as _lr
+        except ImportError:
+            return
+    if getattr(_lr, "_arcanum_cache_patched", False):
+        _LAYA_CACHE_PATCHED = True
+        return
+    _orig = _lr._load_laya_agent
+
+    def _cached_load(model_path: str):
+        key = str(model_path)
+        agent = _LAYA_AGENT_CACHE.get(key)
+        if agent is None:
+            agent = _orig(model_path)
+            _LAYA_AGENT_CACHE[key] = agent
+        return agent
+
+    _cached_load._arcanum_orig = _orig
+    _lr._load_laya_agent = _cached_load
+    _lr._arcanum_cache_patched = True
+    _LAYA_CACHE_PATCHED = True
+
+
+def _prewarm_laya() -> str:
+    """Best-effort main-thread preload before serve; returns the path or "".
+
+    Failure is silent: rank_hypotheses keeps its own hint/error path."""
+    model_path = (os.environ.get(_LAYA_PATH_ENV) or "").strip()
+    if not model_path:
+        return ""
+    _patch_laya_agent_cache()
+    try:
+        from codeark_pitax.laya_runtime import _load_laya_agent
+    except ImportError:
+        try:
+            from codeark.graph.laya_runtime import _load_laya_agent
+        except ImportError:
+            return ""
+    try:
+        _load_laya_agent(model_path)
+        return model_path
+    except Exception:
+        return ""
 # 2026-11-08 评审 3.7：输入体积上限（JSON 原文按字符计；字段在归一化时截断）
 MAX_RANK_CHARS = 64_000
 _RANK_FIELD_LIMITS = {"title": 200, "vuln_type": 64, "file_path": 500, "attack_path": 2000}
@@ -825,6 +886,7 @@ def rank_hypotheses(hypotheses: str, baseline: str = "") -> str:
             "`pip install arcanum-mcp[laya]` (torch CPU). Everything runs offline."
         )
     try:
+        _patch_laya_agent_cache()
         score = _laya_engine()
         t0 = time.perf_counter()
         probs, confs = score(normalized, baseline_rows, model_path)
