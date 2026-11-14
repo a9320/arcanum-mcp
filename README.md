@@ -250,3 +250,10 @@ behind Azure Container Apps / API Management is the documented enterprise path
 expose this server beyond the local machine, terminate TLS in front of it (reverse
 proxy or platform ingress) — a bearer token over plain HTTP is sniffable. Token
 comparison uses `secrets.compare_digest`; keep the token long and random.
+
+## License
+
+This project is licensed under the MIT License — see [LICENSE](LICENSE).
+The PITAX rule set bundled via `codeark-pitax` carries its own attribution
+(see the [Attribution](#attribution) section); upstream `arcanum-spark` is a
+separate repository with its own terms.
