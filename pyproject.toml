@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arcanum-mcp"
-version = "0.3.3"
+version = "0.3.4"
 license = "MIT"
 license-files = ["LICENSE"]
 description = "MCP server exposing CodeRisk Arcanum's deterministic checks: PITAX prompt-injection scan, code audit, Office document inspection, dependency vulnerability check."
