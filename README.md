@@ -1,5 +1,7 @@
 # arcanum-mcp
 
+mcp-name: io.github.a9320/arcanum-mcp
+
 Five deterministic security tools for AI-assisted coding, exposed over MCP. All run
 **locally**: no model calls, no network, nothing uploaded.
 
