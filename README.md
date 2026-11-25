@@ -1,3 +1,5 @@
+![arcanum-mcp](https://raw.githubusercontent.com/a9320/arcanum-mcp/main/docs/assets/readme-banner-1280x320.png)
+
 # arcanum-mcp
 
 mcp-name: io.github.a9320/arcanum-mcp
@@ -17,6 +19,8 @@ deterministic by design: every tool wraps a scanner that ships in the arcanum-sp
 project, one job each, small responses.
 
 ## Tools
+
+![arcanum-mcp tools](https://raw.githubusercontent.com/a9320/arcanum-mcp/main/docs/assets/tools-diagram-1600x900.png)
 
 | Tool | Answers | Input |
 |---|---|---|
